@@ -3,7 +3,7 @@
 По сути предыдущее решение было некоторой смесью уже описанного процедурного стиля и
 наивного подхода по "интуитивному" написанию логики на основе описания. От процедурного 
 стиля в нем было выделение некоторых повторяющихся рутинных действий, наподобие функции 
-удобной печати результата "fmt_number" и парсинга команды "parse_line". 
+удобной печати результата "fmt_number" и парсинга команды "get_tokens". 
 
 При этом, например, реализация таких элементов как обработка очередной команды "process_command" 
 выполнена в духе "наивного" стиля, так как я не продумывал и не старался выделить повторяющиеся 
@@ -68,68 +68,89 @@ class RobotCleaner:
         print("STOP")
 
 
+def get_tokens_from_raw_line(raw_line: str):
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        None, None
 
-def parse_line(line: str):
     parts = line.strip().split()
     if not parts:
         return None, []
-    cmd = parts[0].upper()
-    args = parts[1:]
-    return cmd, args
+    cmd_name = parts[0].upper()
+    cmd_args = parts[1:]
+    return cmd_name, cmd_args
 
 
-def process_command(robot:RobotCleaner, cmd:str, args:list[str]):
-    match cmd:
-        case "MOVE":
-            if len(args) != 1:
-                raise ValueError("MOVE needs exactly one numeric argument.")
-            dist = float(args[0])
-            robot.move(dist)
-
-        case "TURN":
-            if len(args) != 1:
-                raise ValueError("TURN needs exactly one numeric argument.")
-            delta = float(args[0])
-            robot.turn(delta)
-
-        case "SET":
-            if len(args) != 1:
-                raise ValueError("SET needs exactly one argument of water/soap/brush.")
-
-            VALID_DEVICES = {"water", "soap", "brush"}
-            device_name = args[0]
-            if device_name not in VALID_DEVICES:
-                raise ValueError("SET needs exactly one argument of type water/soap/brush.")
-            robot.set_device(args[0])
-
-        case "START":
-            if len(args) > 0:
-                raise ValueError("START takes no arguments.")
-            robot.start()
-
-        case "STOP":
-            if len(args) > 0:
-                raise ValueError("STOP takes no arguments.")
-            robot.stop()
-
-        case _:
-            print(f"UNKNOWN COMMAND: {cmd}", file=sys.stderr)
+def normalize_str(str_val):
+    return str_val.upper()
 
 
-def main():
+def parse_command_args(cmd_name:str, cmd_args:list, cmd_arg_parsers:dict):
+    cmd_name_normalized = normalize_str(cmd_name)
+    if cmd_name_normalized not in cmd_arg_parsers:
+        raise ValueError("Unknown command %s" % cmd_name)
+    
+    arg_parser, cmd_handler = cmd_arg_parsers[cmd_name_normalized]
+    parsed_args = arg_parser(cmd_args)
+    return parsed_args, cmd_handler
+
+def check_first_arg_conv_to_float(args):
+    if len(args) != 1:
+        raise ValueError("Incorrect args count %s" % args)
+    return float(args[0])
+
+def check_no_args(args):
+    if len(args) != 0:
+        raise ValueError("Incorrect args count  %s" % args)
+
+    return args
+
+def check_the_only_arg_in_list(allowed_list, args):
+    if len(args) != 1:
+        raise ValueError("Incorrect args count %s" % args)
+    if args[0] not in allowed_list:
+        raise ValueError("Arg is not allowed %s, has to be from %s" % (args[0], allowed_list))
+
+    return args[0]
+
+
+def run_command_handle(commands):
+    VALID_DEVICES = {"water", "soap", "brush"}
     robot = RobotCleaner()
-    for raw_line in sys.stdin:
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
+    arg_parsers = {
+        "MOVE" : (lambda args:check_first_arg_conv_to_float(args), lambda args: robot.move(args)),
+        "TURN" : (lambda args:check_first_arg_conv_to_float(args), lambda args: robot.turn(args)),
+        "SET"  : (lambda args:check_the_only_arg_in_list(VALID_DEVICES, args), lambda args: robot.set_device(args)),
+        "START": (lambda args:check_no_args(args), lambda args: robot.start()),
+        "STOP":  (lambda args:check_no_args(args), lambda args: robot.stop())
+    }
+
+    for raw_line in commands:
+        cmd_name, cmd_args = get_tokens_from_raw_line(raw_line)
+        if cmd_name is None:
             continue
-        cmd, args = parse_line(line)
-        if cmd is None:
-            continue
+        
         try:
-            process_command(robot, cmd, args)
+            args, cmd_handler = parse_command_args(cmd_name, cmd_args, arg_parsers)
+            cmd_handler(args)
         except ValueError as e:
             print(e)
             continue
+
+
+def main():
+    test_commands = [
+    'MOVE 100',
+    'TURN -90',
+    'SET soap',
+    'START',
+    'MOVE 50',
+    'STOP', 
+    'SET brup', 
+    'MOVE ',
+    'START 00']
+    run_command_handle(test_commands)
+
 
 
 if __name__ == "__main__":
