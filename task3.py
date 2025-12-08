@@ -1,15 +1,6 @@
 
 import sys
 import math
-from enum import Enum
-
-class Actions(Enum):
-    MOVE  = 1
-    TURN  = 2
-    SET   = 3
-    START = 4
-    STOP  = 5
-
 
 
 def fmt_number(v):
@@ -195,4 +186,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
